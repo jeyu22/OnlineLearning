@@ -1,0 +1,547 @@
+---
+title: "Factors of Successful Online Learning"
+subtitle: "Zoomers"
+author: "Lillian Kim, Jemima Park, Jessica Yu"
+date: "May 6, 2020"
+output: 
+  pdf_document:
+    toc: true
+    toc_depth: 2
+    number_section: false
+    df_print: kable
+    fig_height: 3
+    fig_width: 5
+abstract: "Due to a recent pandemic of COVID-19, understanding the viability of remote learning is now more important than ever. We wanted to know if the factors that contribute to academic achievement under a traditional education system were still applicable to remote learning and how the remote learning could become a satisfying alternative for parents in the absence of traditional education. Multiple logistic regression analyses were conducted using an automated variable selection technique. Results showed that both student engagement in learning and parental attention to a child's education were just as important for a child's success and parent satisfaction in online learning as in a traditional mode of learning. Limitations and future directions are discussed."
+
+references:
+- id: eddata1
+  type: article-journal
+  title: Mining Educational Data to Predict Student’s academic Performance using Ensemble Methods
+  author:
+  - family: Amrieh
+    given: E. A.
+  - family: Hamtini
+    given: T.
+  - family: Aljarah
+    given: I.
+  container-title: International Journal of Database Theory and Application
+  volume: 9
+  issue: 8
+  page: 119-136
+  issued:
+    year: 2016
+    month: 9
+  URL: 
+  DOI: 10.14257/ijdta.2016.9.8.13
+  
+- id: eddata2
+  type: article-journal
+  title: Preprocessing and analyzing educational data set using X-API for improving student's performance
+  author:
+  - family: Amrieh
+    given: E. A.
+  - family: Hamtini
+    given: T.
+  - family: Aljarah
+    given: I.
+  container-title: Applied Electrical Engineering and Computing Technologies (AEECT)
+  volume: 9
+  issue: 8
+  page: 119-136
+  issued:
+    year: 2015
+    month: 11
+  URL: 
+  DOI: 10.1109/AEECT.2015.7360581
+    
+- id: onlinedata
+  type: dataset
+  title: Students' Academic Performance Dataset
+  author:
+  - family: Aljarah
+    given: Ibrahim
+  publisher: Kaggle
+  URL: 'https://www.kaggle.com/aljarah/xAPI-Edu-Data'
+  issued:
+    year: 2016
+    month: 11
+    day: 8
+  accessed:
+    year: 2020
+    month: 3
+    day: 20
+    
+- id: eddata3
+  type: article-journal
+  title: A review of predictive factors of student success in and satisfaction with online learning
+  author:
+  - family: Kauffman
+    given: H
+  container-title: Research in Learning Technology
+  volume: 23
+  issue: 
+  page: 1-13
+  issued:
+    year: 2015
+    month: 7
+  URL: https://journal.alt.ac.uk/index.php/rlt/article/download/1648/pdf_13/
+  DOI: 10.3402/rlt.v23.26507
+---
+```{r, setup, include=FALSE}
+# Load necessary packages
+require(mosaic)
+require(kableExtra)
+library(tidyverse)
+library(janitor)
+library(MASS)
+
+emplogitplot <- function(resp, pred, numbreak = 10) {
+  # assumes resp is dichotomous with values 0 and 1
+  tmpGroup <- cut(pred, breaks = numbreak)
+  binned.y <- mosaic::mean(~ resp | tmpGroup)
+  binned.x <- mosaic::mean(~ pred | tmpGroup)
+  logy <- mosaic::logit(binned.y)
+  ds <- data.frame(logy, binned.x)
+  gf_point(logy ~ binned.x, cex = 2, pch = 19, data=ds) %>%
+    gf_line() %>%
+    gf_labs(x = "Binned Predictor", y = "Empirical Logit")
+} 
+
+knitr::opts_chunk$set(
+  tidy = FALSE,     # display code as typed
+  size = "small",   # slightly smaller font for code
+  comment = "")     # display code output without hashes
+theme_set(theme_classic())
+
+path <- "http://kcorreia.people.amherst.edu/S1920"
+file <- "Stat230_Zoomers_Data.csv"
+path_file <- paste0(path,"/", file)
+online <- read_csv(path_file) %>% 
+  clean_names()
+
+online.og <- online
+```
+
+\thispagestyle{empty}
+\newpage
+
+# Background and Significance
+
+In light of recent pandemic of COVID-19, online learning has surged in popularity and necessity. As students who are currently adapting to online learning, we would like to assess what factors contribute to academic achievement, which we are defining as the overall grade given for the class. There are many factors that affect one’s experience in a classroom, so what is essential in maximizing one’s performance? In the traditional classroom setting factors such as participation and seeking resources contribute positively to overall performance. Does that translate over to online learning? There have been several studies published in the past few years in search of the best structure of online courses that generate high student satisfaction. A study by Ke and Xie (2009) found that students have higher overall satisfaction with their courses that include large amounts of discussion and organized course materials (as cited in @eddata3). What many of these studies lack is scope: most analyze results from one age group in one specific course. What we hope to do in our analysis is confirm findings in past studies regarding the association between high engagement and success in online class, as well as dig further to see if that relationship exists even across different subjects, age group, and gender. 
+
+On a related note, we are also interested in exploring parent satisfaction with online learning; recent events have shifted our idea of what learning can look like. We not only want to explore what attributes make online learning successful, but also how it compares in quality to learning in the traditional classroom setting. While we don't have the data to make a definitive comparison between the two methods, we can use the measure of parent satisfaction to do some initial exploration into this idea. If there is a signficant amount of parent satisfaction with online learning will more parents consider enrolling in these types of programs? Parent satisfaction is not a measure typically explored in previous studies, and we hope to shed light on this topic. 
+
+As time progresses, the nature of education as we know it is bound to change. Research on the effectiveness of alternative methods of learning is crucial for our society to adapt during unprecedented times. 
+
+# Methods
+
+## Data collection
+
+Kalboard 360, a learning management system, examined students’ e-learning experience using a learner activity tracker tool that monitors learning processes and learner’s behavioral engagement during online learning (@eddata1; @eddata2; @onlinedata). From each student, Kalboard 360 also collected demographic information such as gender and nationality, as well as academic background information such as educational level and subject they took online learning for. 
+
+Each of 480 observations represents an individual student. Educational levels of students range from kindergarten to highschool. Although most students are from countries in the Middle East and Northern Africa, there are a few students outside of the region. We can generalize the results to the students of all educational levels in the Middle East and Northern Africa, and possibly to other regions as well. 
+
+## Variable creation
+
+### Preliminary data wrangling
+
+Unnecessary variables were removed from the dataset. *section_id* denoting the classroom a student belonged to was removed because it was unclear how the classrooms were decided in the original dataset. Variable *grade_id* that denoted which grade a student attended was removed because they provided information redundant to other variables. Variable *nationality* and *placeof_birth* were removed because some levels contained too few observations to conduct a proper, reliable analysis. 
+
+```{r}
+# remove unnecessary variables
+online <- 
+  subset(online.og, select=-c(nationality, placeof_birth, section_id, grade_id, semester))
+```
+
+Many of the nominal variables in the dataset had descriptive labels for levels. For example, *student_absence_days* had two levels, "Under-7" for students with equal to or less than 7 days of absence and "Above-7" for students with more than 7 days of absence. Also, our primary response variable *class* originally had three levels--"L" for a grade below 69, "M" for a grade of 70-89, and "H" for a grade of 90-100--which was not feasible for logistic regression analysis requiring a binary response variable. Therefore, for our analysis, nominal variables were coded to have 0-1 binary levels where appropriate.
+
+```{r}
+# code variables into 0 and 1 binary where appropriate
+online <- online %>%
+  mutate(student_absence_days = case_when(student_absence_days == "Under-7" ~ 0, 
+                                          student_absence_days == "Above-7" ~ 1), 
+         parent_answering_survey = case_when(parent_answering_survey == "Yes" ~ 1,
+                                             parent_answering_survey == "No" ~ 0),
+         parent_school_satisfaction = case_when(parent_school_satisfaction == "Good" ~ 1,
+                                                parent_school_satisfaction == "Bad" ~ 0))
+
+online <- online %>%
+  mutate(class = case_when(class == "L"~0, 
+                           class == "M" | class == "H" ~ 1))
+
+```
+
+### Response variables
+
+1. class
+  A final grade of a student at the end of the semester. (nominal: "1" for a grade of 70-100, "0" for a grade of 0-69)
+
+2. parent_school_satisfaction
+  Whether a parent was satisfied with the school (nominal: "1" for being satisfied, "0" for not being satisfied)
+
+### Predictor variables
+
+1. Demographic variables
+  + gender
+    Self-reported biological sex (nominal: "M" for male, "F" for female)
+
+2. Academic background variables
+  + stage_id
+    The academic levels of schools a student attends (nominal: "lowerlevel", "MiddleSchool", "HighSchool")
+  
+  + topic
+    The course subject for which a student participated in online learning (nominal: "Arabic", "Biology", "Chemistry", "English", "French", "Geology", "History", "IT", "Math", "Quran", "Science", "Spanish")
+
+
+3. Student engagement variables
+  + raised_hands
+    The total number of times a student raised hand in class in a semester (quantitative: 0-100)
+
+  + announcements_view
+    The total number of times the student checked the new announcements on the web page in a semester (quantitative: 0-100)
+  
+  + discussion
+    The total number of times the student participated in discussion groups in a semester (quantitative: 0-100)
+  
+  + visited_resources
+  The total number of times a student visited the course content web page in a semester (quantitative: 0-100)
+  
+  + student_absence_days
+  The total number of days when a student was absent from class in a semester (nominal: "0" for below 7 days, "1" more than 7 days)
+  
+4. Parent background variable
+  + relation
+  A parent who answered the survey provided by the school (nominal: "Mum", "Father")
+
+## Analytic methods
+
+To check if the models have predictive power on a different sample from the one it was developed, the original dataset will be split into a testing sample and a holdout sample. We will use multiple logistic regression to study the association between passing an online course and various student engagement measures as well as demographics. We will use another multiple logistic regression model to study the association between parent satisfaction and a combination of student characeristics and engagement measures. The effectiveness of the models will be evaluated using the likelihood ratio test, and VIFs will be calculated to detect any multicollinearity between the predictors.
+
+# Results
+
+## Descriptive analysis
+```{r}
+engagement <-rbind(favstats(~visited_resources,data=online),
+                   favstats(~raised_hands, data=online),
+                   favstats(~announcements_view, data=online),
+                   favstats(~discussion, data=online))
+
+rownames(engagement) <- c("Visited Resources","Raised Hands", 
+                          "Viewed Announcements", "Discussion")
+
+engagement
+```
+
+First, we wanted to get a general idea of what how our predictors were distributed. 64% of students identified as male, 36% female. Over 50% of students were at the middle school level compared to only 7% that were in highschool, and the courses they took varied widely across 12 different subjects.Student engagement actions including the number of times they visited resources and participated in discussion had a mean at about 40-50 times with the maximum count being 100 (see table above). Over 70% of students passed their courses with a grade of 69 or higher on a 100-point scale.  
+For the data relevant to parents, 60% of parents were satisfied with the overall online education that their child was enrolled in. Over half of parents took the time to respond to the surveys sent by the school. Note that the parent satisfaction response does not come from the surveys. These variables are separate from each other.
+
+## Bivariate analyses
+
+Parents who did respond to the surveys tended to report being satisfied with the online curriculm, whereas parents who did not respond tended to report not being satisfied with the online curriculm. In addition, approximately 70% of parents who were satisfied with the curriculm had children who had fewer than 7 days of absence. Parent response to survey and student absent days may be possible signficant predictors in parent satisfaction, and will be explored in our logistic regression model. 
+
+```{r}
+tally(~parent_school_satisfaction | parent_answering_survey, 
+      data=online, format="percent")
+
+tally(~student_absence_days | parent_school_satisfaction, 
+      data=online, format="percent")
+```
+
+When the bivariate relationship includes at least one categorical predictor, we do not need to worry about VIFs or multicollinearity, but examining the relationship will help us gain some insight as to what kind of role these predictors might play in the logistic model.  
+
+Looking at grade level and various student engagement factors, the amount of student engagement does not vary across different ages. On the other hand, student engagement does seem to vary between students that were absent more frequently than not. 
+
+```{r, echo=FALSE} 
+r <-ggplot(data=online, aes(x=stage_id,
+                            y=raised_hands))+geom_boxplot()
+
+v <-ggplot(data=online, aes(x=stage_id,
+                            y=visited_resources))+geom_boxplot()
+
+a <- ggplot(data=online, aes(x=stage_id,
+                             y=announcements_view))+geom_boxplot()
+
+d <- ggplot(data=online, aes(x=stage_id,
+                             y=discussion))+geom_boxplot()
+```
+```{r}
+# student engagement by grade level
+gridExtra::grid.arrange(r,v,a,d)
+```
+```{r, echo=FALSE}
+rr <- ggplot(data=online, aes(x=as.factor(student_absence_days),
+                              y=raised_hands))+geom_boxplot()+xlab("Absence")
+vv <- ggplot(data=online, aes(x=as.factor(student_absence_days),
+                              y=visited_resources))+geom_boxplot()+xlab("Absence")
+aa <- ggplot(data=online, aes(x=as.factor(student_absence_days),
+                              y=announcements_view))+geom_boxplot()+xlab("Absence")
+dd <- ggplot(data=online, aes(x=as.factor(student_absence_days),
+                              y=discussion))+geom_boxplot()+xlab("Absence")
+```
+
+```{r}
+# student engagement by absence
+gridExtra::grid.arrange(rr,vv,aa,dd)
+```
+
+```{r}
+# Check multicollinearity issue among student engagement variables
+
+## check correlations
+check.corr <- 
+  subset(online, select = c("raised_hands", "discussion", "announcements_view",
+                            "visited_resources"))
+
+cor(check.corr)
+```
+
+We suspected that the the number of times a student raised hand in a a semester, the number of times a sutdent participated in discussion groups in a semester, the number of times a student checked the new announcements on the web page in a semester, and the number of times a student visited the course content web page in a semester might be correlated to one another, because all four variables measured slightly different domains of student engagement in online learning. However, bivariate correlation analysis showed that there were no multicollinearity issues among these variables (all $r$s < 0.70). Therefore, all four variables were separately included in regression analysis without creating a composite variable of student engagement in learning.
+
+## Logistic regression analyses
+
+```{r}
+#randomly ordering observations
+set.seed(3)
+online2 <- online %>% 
+      mutate(random_num = rnorm(n = 480, mean=0, sd=1)) %>%
+      arrange(random_num) 
+ 
+online2 <- subset(online2, select = -random_num)            
+
+#dividing the dataset into a training sample and holdout sample
+online2.training <- online2[ c(1:240), ] #training
+online2.holdout <- online2[ -c(1:240), ] #holdout
+```
+
+First, we randomly ordered 480 observations and separated the first 240 observations from the next 240 observations so that we could create a training sample and a holdout sample. We constructed a logistic regression model based on a training sample, and used the model on a holdout sample to test if the model had a predictive power for not only the sample it was based on but also other samples.
+
+
+### Inference Conditions
+
+1. Linearity 
+
+We first checked the inference conditions for the model predicting whether the student achieves a passing grade with empirial logit plots.
+```{r}
+# the number of times a student visited resources web page
+with(online2.training, emplogitplot(class, visited_resources, 5))
+
+# the number of times a student participated in discussions
+with(online2.training, emplogitplot(class, discussion, 5))
+
+# the number of times a student raised hand in class
+with(online2.training, emplogitplot(class, raised_hands, 5))
+
+# the number of times a student viewed new announcements
+with(online2.training, emplogitplot(class, announcements_view, 5))
+```
+
+The linearity condition only needs to be checked for quantitative variables i.e. 4 variables measuring the student engagement. Based on the empirical logit plots, the number of times a student visited resources, the number of a student raised hand, and the number of times a student viewed announcements had a relatively linear relationship with log odds of a student passing a course. However, the number of times a student participated in discussions appeared to have a cubic relationship with the response variable. Therefore, we tried including a cubic term of *discussion* in the model predicting a pass/fail for a student below.
+
+```{r}
+#For parent_school_satisfaction
+
+# the number of times a student visited resources web page
+with(online2.training, emplogitplot(parent_school_satisfaction, visited_resources, 10))
+
+# the number of times a student participated in discussions
+with(online2.training, emplogitplot(parent_school_satisfaction, discussion, 10))
+
+# the number of times a student raised hand in class
+with(online2.training, emplogitplot(parent_school_satisfaction, raised_hands, 10))
+
+# the number of times a student viewed new announcements
+with(online2.training, emplogitplot(parent_school_satisfaction, announcements_view, 10))
+```
+
+The empirical logit plots for whether a parent was satisfied with online schooling appeared far from linear, which suggested that there might not be a clear association between parental satisfaction and student engagement variables. 
+
+2. Independence and Randomness
+
+The randomness condition for our logistic models are not met, as there was no mention of whether the data collected for student performance was a random sample. However, the independence condition is satisfied because student academic achivement is presumably independent from one another. While only a portion of our conditions were met, we proceeded with caution, making sure not to generalize our results to a wider population. 
+
+### Automated variable selection
+
+1. Predicting the pass/fail outcome of a student
+
+Based on the empirical logit plot of *discussion*, which showed a cubic pattern, we included its squared and cubic terms in the automated variable selection process.
+
+```{r, message=FALSE, warning=FALSE}
+
+options(scipen= 999)
+# Kitchen-sink model
+k.sink.class <- glm(class~. + I(discussion^2) + I(discussion^3), 
+                    data=online2.training, family="binomial")
+
+# Automated variable selection
+auto.class <- stepAIC(k.sink.class, trace=FALSE)
+msummary(auto.class)
+
+#Include a linear term of discussion with a squared term
+final.class <- glm(class ~ gender + raised_hands + visited_resources +
+                     announcements_view + parent_answering_survey +
+                     student_absence_days + discussion + I(discussion^2),
+                   data=online2.training, family="binomial")
+msummary(final.class)
+
+#Likelihood Ratio Test (LRT) for model utility
+xpchisq(final.class$null.deviance - final.class$deviance, 
+        df = final.class$df.null - final.class$df.residual)
+
+#check multicollinearity
+car::vif(final.class)
+```
+
+Best subsets automated selection technique produced a model with *gender*, *raised_hands*, *visited_resources*, *discussion^2*, *announcements_view*,  *student_absence_days*, and *parent_answering survey* as predictors. We constructed a final model by adding the linear term *discussion*, because it is necessary to include the linear term if its polynomial term is significant.  In short, a student's gender, the degree to which a student was engaged in online learning, and whether a parent took the time to answer a survey from school together significantly predicted whether a student would pass the course at the end of the semester (G=207.59, df=8, p<.001, AIC=101.78). The VIFs of the predictors were all less than 5 except for the VIFs of the linear *discussion* term and the squared *discussion* term, which were expected to be highly correlated.
+
+```{r}
+#interpret coefficients in odds ratio
+exp(coefficients(final.class))
+```
+
+We can put some of these coefficents in context. Adjusting for all other characterisitcs, every additional time a student views the new announcement web page is associated with 2.4% increase in the odds of passing a class (OR=1.024). Every additional time a student raises hand in a class is associated with 4.7% increase in the odds of passing a class (OR=1.047). If a student is absent for more than 7 days in a course, the odds of passing a course decreases by 99.972% (OR=0.028). The odds of passing the course for a student whose parent answered a survey were 6.83 times the odds of passing a course for a student whose parent did not answer a survey (OR=6.826).
+
+2. Predicting a parental satisfaction with online schooling
+
+```{r, warning=FALSE}
+
+# Kitchen-sink model
+k.sink.satis <- glm (parent_school_satisfaction ~ ., 
+                     data = online2.training, family = "binomial")
+
+final.satis <- stepAIC(k.sink.satis, trace = FALSE)
+msummary(final.satis)
+
+#Likelihood Ratio Test (LRT) for model utility
+xpchisq(final.satis$null.deviance-final.satis$deviance,
+        df = final.satis$df.null - final.satis$df.residual)
+
+#check multicollinearity
+car::vif(final.satis)
+```
+
+Best subsets automated selection technique produced a model with *relation*, *raised_hands*, *discussion*, and *parent_answering_survey* as significant predictors for whether a parent was satisfied with school. In short, which parent was primarily responsible for educational communication with school, whether a parent took time to answer a survey from school, and the number of times a student raised hands in class and participated in discussion together significantly predicted whether a parent was satisfied with the child's online schooling (G=93.61, df=4, p<.001, AIC=236.85). According to the VIFs of the predictors, there was no multicollinearity issue in this model.
+
+```{r}
+exp(coefficients(final.satis))
+```
+
+We can put some of these coefficents in context. Adjusting for all other characterisitcs, the odds of a parent being satisfied with online schooling is 11.63 times higher for a parent who took the time to answer the survey from the school than for a parent who did not (OR=12.63). If mothers fill out the survey from the school, their odds of being satisfied with a child's online education are 2.34 times the odds if fathers answer the survey (OR=2.342).
+
+### Testing the predictive power of the model
+
+1. Predicting the pass/fail outcome of a student
+
+```{r}
+# Test the model on a holdout sample
+final.class.holdout <- glm(class ~ gender + raised_hands + visited_resources +
+                     announcements_view + parent_answering_survey +
+                     student_absence_days + discussion + I(discussion^2),
+                   data=online2.holdout, family="binomial")
+
+msummary(final.class.holdout)
+
+xpchisq(final.class.holdout$null.deviance - final.class.holdout$deviance,
+        df = final.class.holdout$df.null - final.class.holdout$df.residual)
+```
+
+Fitting the model on the holdout sample, we found that at least one of the predictors in the model was significant in predicting the pass/fail outcome of a student in the holdout sample (G=175.23, df=8, p<.001). Note that we cannot directly compare the deviance and AIC value because two models are based on different samples.  
+However, the changes in the significance of some predictors should be noted. Adjusting for all other predictors, the number of times a student raised hand and whether a parent answered a survey from school significantly predicted a pass/fail outcome in the training sample, but they were not significant anymore in the holdout sample (p=.146, p=.084). On the other hand, the number of times a student viewed announcements, which was not significant in the training sample, significantly predicted a pass/fail outcome in the holdout sample (p=.047). Both the linear and squared terms of the number of times a student participated in class discussions have also become significant predictors in the holdout sample, with p-values of p=.016 and p=0.010, respectively.
+
+2. Predicting a parental satisfaction with online schooling
+
+```{r}
+# Test the model on a holdout sample
+final.satis.holdout <- glm(parent_school_satisfaction ~ relation + raised_hands +
+                             discussion + parent_answering_survey,
+                           data=online2.holdout, family="binomial")
+
+msummary(final.satis.holdout)
+
+xpchisq(final.satis.holdout$null.deviance - final.satis.holdout$deviance,
+        df = final.satis.holdout$df.null - final.satis.holdout$df.residual)
+```
+
+Testing the model on the holdout sample, we found that the model was still useful at predicting parental satisfaction with the same set of predictors (G=91.53, df=4, p<.001). In the training model, the student engagement variables such as the number of times a student raised hand and the number of times a student participated in discussions were only marginally significant (p=.070) or not significant (p=.138), respectively. But, the number of times a student raised hand was significant (p=.047), and the number of times a student participated in class discussions was marginally significant (p=.051) in predicting parental satisfaction in the holdout sample when all other predictors have been adjusted for in the model.
+
+# Conclusion
+
+A recent pandemic of COVID-19 has necessitated remote learning for all levels of education, highlighting the importance of understanding how different the online learning is from the traditional method of learning. We wanted to know if the factors that contribute to academic achievement under a traditional education system were still applicable to remote learning. We also wanted to understand how to develop remote learning into a sustainable, viable alternative that could satisfy parents in the absence of traditional education.  
+
+Multiple logistic regression analyses were conducted to develop models predicting a pass/fail academic outcome of a student and parental satisfaction with online education. Just as in traditional classrooms, students who engaged more in the online learning by raising hand, checking daily announcements, utilizing resources, and participating in discussions were more likely to attain academic success. Especially, the number of days that a student was absent from online schooling was highly significant in predicting a student's pass/fail grade. A student with parents who were so attentive to a child's education as to complete a survey from school were more likely to succeed academically, which illustrated that a household environment and parental care was critical to academic success, regardless of the mode of learning.   
+
+We expected that a parent would be more satisfied with online learning if their child engaged more. Analysis revealed that student engagement was still relevant, albeit less, to predicting parental satisfaction. Mothers were more likely to report satisfaction with online schooling than fathers. Parents who care about their child's education enough to complete a survey from the school were more likely to be satisfied with online schooling.   
+There are a few limitations in this analysis. First of all, the randomness condition is not fulfilled because the data was not collected through a random sampling. It is important to understand that the results cannot be generalized to a broader population, especially not to the college students and to the countries not in the Middle East. Further research is necessary to generalize the findings to the American students doing the remote learning due to the current COVID-19 pandemic.   
+
+Another shortcoming of this dataset was that some variables which were likely measured quantitatively in the data collection process were already converted into categorical variables. For example, the number of days a student was absent from the online class in a semester was already converted into a categorical variable denoting whether a student was absent for more or less than 7 days. This way, a student who missed 8 days of an online school and a student who missed, say, 30 days of school are considered as equal in the analysis. More detailed and accurate analyses would be possible with raw data.   
+One direction a future research could pursue is to explore if there are any differences between different course subjects. Initially, we expected that the interaction of course subects and the level of school a student attends may be present because certain subjects, such as mathematics and chemistry, are known to become more difficult as students become older. However, such analysis was impossible because there were too few observations and too little variability in some cells. Future reserach should examine if online learning is more viable for certain course subjects than others by comparing average student academic achievement and parental satisfaction of, for example, STEM subjects and non-STEM subjects.   
+Overall, despite some limitations, analyses mostly confirmed our expectations that student engagement and parental attention to a child's education would be just as important in online learning as in a traditional mode of learning.  
+
+# Appendix
+
+1. Additional descriptive analyses
+```{r}
+# region
+tally(~nationality, data=online.og, format = "percent")
+
+# gender of participants
+tally(~gender, data=online)
+tally(~gender, data=online, format="percent")
+
+# participant school level
+tally(~stage_id, data=online, format="percent")
+
+# pass/fail outcome
+tally(~class, data=online,format = "percent")
+
+# course subjects
+tally(~topic, data=online)
+
+# Whether a parent was satisfied with online schooling
+tally(~parent_school_satisfaction, data=online, format = "percent")
+
+# Whether a parent answered a survey from school
+tally(~parent_answering_survey, data=online,format = "percent")
+
+# Which parent answered a survey from school
+tally(~ relation , data=online,format = "percent")
+
+# Whether a student missed more than 7 days of school
+tally(~student_absence_days, data=online)
+```
+
+2. Interaction term
+
+We expected that the interaction of whether a student was absent for more than 7 days and the level of school may be present because missing more days of school as a high school senior may impact success more than as a 1st grader. Therefore, we explored whether adding the `stage_id*student_absence_days` interaction term significantly improved either model.
+
+```{r}
+class.int1 <- glm(class ~ gender + raised_hands + visited_resources +
+                    announcements_view + parent_answering_survey +
+                    stage_id*student_absence_days + discussion + I(discussion^2), 
+                    data=online2.training, family="binomial")
+msummary(class.int1)
+msummary(final.class)
+
+#nested LRT
+xpchisq(final.class$deviance - class.int1$deviance, df=4)
+```
+
+Including the said interaction term did not significantly improve the prediction of a student's pass/fail outcome, p=.839.
+
+```{r}
+
+satis.int1 <- glm(parent_school_satisfaction ~ relation + raised_hands + discussion
+                  + parent_answering_survey + stage_id*student_absence_days, 
+                    data= online2.training, family = "binomial")
+
+msummary(satis.int1)
+msummary(final.satis)
+
+#nested LRT
+xpchisq(final.satis$deviance - satis.int1$deviance, df=5)
+```
+
+Including the said interaction term did not significantly improve the prediction of a parental satisfaction with online learning, p=.589. 
+
+# References
+
+
